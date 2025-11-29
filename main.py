@@ -331,7 +331,7 @@ def main():
             ]).content
             
             # Save summarized context to database
-        db = ContextDatabase(config['PARENT_FOLDER'])
+            db = ContextDatabase(config['PARENT_FOLDER'])
             db.update_summarized_context(config['context_id'], summarized_context)
             db.close()
 
