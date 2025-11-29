@@ -71,3 +71,4 @@ When you find the bug, pass this JSON structure to the `completion` tool:
   "reasoning": "Explanation linking code to CVE...",
   "fix_reference": "Fixed in v1.2 by commit xyz"
 }
+"""
