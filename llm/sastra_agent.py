@@ -260,11 +260,11 @@ class SastraReActAgent:
         return [
             read_file,
             # read_file_top_level,
-            ripgrep,
+            # ripgrep,
             list_directory,
             git_command,
-            get_url_content,
-            execute_safe_command,
+            # get_url_content,
+            # execute_safe_command,
             completion
         ]
     
