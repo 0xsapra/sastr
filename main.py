@@ -298,12 +298,14 @@ def main():
             'LLM_TYPE': 'litellm',
             'MODEL': 'qwen-32-fp8',
             'MAX_TOKENS': 50_000, 
+            'BASE_URL': 'http://localhost:8000/v1/',
             'API_KEY': os.getenv("LLM_CODE_EXPERT_API_KEY"),
         },
         'LLM_SUMMARIZER': { 
             'LLM_TYPE': 'litellm',
             'MODEL': 'qwen-32-fp8',
             'MAX_TOKENS': 50_000, 
+            'BASE_URL': 'http://localhost:8000/v1/',
             'API_KEY': os.getenv("LLM_SUMMARIZER_API_KEY"),
         }
     }
