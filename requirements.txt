@@ -1,0 +1,7 @@
+langchain
+langchain_openai
+crawl4ai
+vllm
+fastapi
+uvicorn
+huggingface_hub

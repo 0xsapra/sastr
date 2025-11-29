@@ -1,0 +1,70 @@
+.DS_Store
+projects/
+.venv
+__pycache__/
+*.pyc
+.env
+.vscode/
+.idea/
+*.log
+node_modules/
+dist/
+build/
+jazzer-main
+
+# Database files
+*.db
+*.db-journal
+
+# Cached repositories
+cvelistV5/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Example outputs
+example_*.db
+batch_*.db
+
+advisory-database/
+db_folder/
+upload/
+java/
