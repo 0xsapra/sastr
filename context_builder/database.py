@@ -10,6 +10,7 @@ class ContextDatabase:
     def __init__(self, db_path: str):
 
         db_path = f"{db_path}/cve_context.db"
+        print(db_path)
         self.db_path = db_path
         self.conn = None
         self.cursor = None
