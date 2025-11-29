@@ -27,11 +27,11 @@ logger = logging.getLogger(__name__)
 class ContextBuilder:
     """Main context builder orchestrator"""
 
-    def __init__(self, db_folder: str, config: Dict[str, Any] = {}):
-        self.db = ContextDatabase(f"{db_folder}/cve_context.db")
-        self.nuclei_collector = NucleiCollector(f"{db_folder}/nuclei-templates")
-        self.github_advisories = GitHubAdvisoriesCollector(f"{db_folder}/advisory-database", config)
-        self.cvelist_collector = CVEListCollector(f"{db_folder}/cvelistV5")
+    def __init__(self,PARENT_FOLDER,  config: Dict[str, Any] = {}):
+        self.db = ContextDatabase(config["DB_PATH"])
+        self.nuclei_collector = NucleiCollector(f"{PARENT_FOLDER}/db_folder/nuclei-templates")
+        self.github_advisories = GitHubAdvisoriesCollector(f"{PARENT_FOLDER}/db_folder/advisory-database", config)
+        self.cvelist_collector = CVEListCollector(f"{PARENT_FOLDER}/db_folder/cvelistV5")
         self.github_search = GitHubSearchProcessor(config)
         self.link_parser = ReferenceLinkParser()
         

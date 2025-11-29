@@ -11,6 +11,7 @@ import json
 import time
 
 load_dotenv(".env")
+PARENT_FOLDER = "/workspace/"
 
 def get_context(config) -> str:
     """
@@ -246,7 +247,7 @@ def main():
     PRODUCT_INFO = {
         "product_name": "osTicket",
         "CVE_ID": "CVE-2025-26241",
-        "project_dir": "/Users/amansapra/Desktop/NCIIPC/sast-vuln/test_projects/osTicket",
+        "project_dir": PARENT_FOLDER + "/projects/" + "/osTicket",
         "version_of_interest": "1.17.3",
         "FIXED_VERSION": "1.17.6",
         "NEAREST_VULN_VERSION": "1.17.5",
@@ -268,7 +269,7 @@ def main():
         "github_token": os.getenv("GITHUB_TOKEN"),
         "DEBUG_MODE": True,
 
-        "DB_PATH": "/Users/amansapra/Desktop/NCIIPC/sast-vuln/db_folder/cve_context.db",
+        "DB_PATH": PARENT_FOLDER + "/db_folder/cve_context.db",
         # # 'LLM_CODE_EXPERT': {
         # #     'LLM_TYPE': 'LITELLM', # litellm can be: litellm,  antropic , openai, ollama (MUST have)
         # #     'MODEL': 'claude-sonnet-4-5-20250929',
@@ -295,15 +296,15 @@ def main():
         #     'PROVIDER': 'openai'
         # }
         'LLM_CODE_EXPERT': {
-            'LLM_TYPE': 'anthropic',
-            'MODEL': 'claude-sonnet-4-5-20250929',
-            'MAX_TOKENS': 200_000, 
+            'LLM_TYPE': 'litellm',
+            'MODEL': 'qwen-32-fp8',
+            'MAX_TOKENS': 50_000, 
             'API_KEY': os.getenv("LLM_CODE_EXPERT_API_KEY"),
         },
         'LLM_SUMMARIZER': { 
-            'LLM_TYPE': 'anthropic',
-            'MODEL': 'claude-sonnet-4-5-20250929',
-            'MAX_TOKENS': 200_000, 
+            'LLM_TYPE': 'litellm',
+            'MODEL': 'qwen-32-fp8',
+            'MAX_TOKENS': 50_000, 
             'API_KEY': os.getenv("LLM_SUMMARIZER_API_KEY"),
         }
     }
@@ -313,7 +314,7 @@ def main():
     if "context_id" not in config or not config["context_id"]:
         # Building CVE
         try:
-            builder = ContextBuilder("/Users/amansapra/Desktop/NCIIPC/sast-vuln/db_folder", config=config)
+            builder = ContextBuilder(PARENT_FOLDER, config=config)
             context_id = builder.build_context(
                 cve_id=config["CVE_ID"],
                 product_name=config["product_name"],

@@ -8,8 +8,8 @@ class ContextDatabase:
     """Database handler for CVE context storage"""
     
     def __init__(self, db_path: str):
-        if not db_path.endswith('cve_context.db'):
-            db_path = f"{db_path}/cve_context.db"
+
+        db_path = f"{db_path}/cve_context.db"
         self.db_path = db_path
         self.conn = None
         self.cursor = None
