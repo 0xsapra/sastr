@@ -120,6 +120,7 @@ class GitHubAdvisoriesCollector:
 
     def __init__(self, advisory_db_path, config: Dict[str, Any] = {}):
         self.advisory_db_path = advisory_db_path
+        self.db_path = config["PARENT_FOLDER"] + "/db_folder/cve_context.db"
         self._ensure_advisory_db()
     
     def _ensure_advisory_db(self):
@@ -150,11 +151,9 @@ class GitHubAdvisoriesCollector:
             except subprocess.CalledProcessError as e:
                 logger.error(f"Failed to update advisory database: {e}")
     
-    # TODO: convert this to db query later / refresh db on new PULL is challenge
     def search_advisory(self, cve_id: str, product_name: str) -> Dict[str, Any]:
         """
-        Search for GitHub advisory in local database
-        product_name can have spaces so we search all
+        Search for GitHub advisory in database
         """
         result = {
             "found": False,
@@ -164,56 +163,61 @@ class GitHubAdvisoriesCollector:
         }
         product_names_for_lookup = product_name.split(" ")
         
-        if not os.path.exists(self.advisory_db_path):
-            logger.warning("Advisory database not found")
-            return result
-        
         try:
-            # Search for CVE in advisory database using grep (product_names_for_lookup are done | grep | grep or something)
-            # cmd = f'grep -rl "{value1}" "{self._path}" | xargs grep -l "{value2}" | xargs grep -l "{value3}"'
-            cmd = f'grep -rl "{cve_id}" "{self.advisory_db_path}"'
-            xargs = "| ".join(f" xargs grep -iR \"{pn}\"" for pn in product_names_for_lookup if pn)
-            if xargs:
-                cmd += " | " + xargs
-
-            grep_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            import sqlite3
+            import json
             
-            if grep_result.returncode == 0:
-                advisory_files = [file.split(":")[0] for file in grep_result.stdout.strip().split('\n')]
-
-                # remove duplicate same files
-                advisory_files = list(set(advisory_files))
-
-                # Process the first matching advisory file
-                if len(advisory_files) > 1:
-                    raise Exception(f"Multiple advisories found for {cve_id} in GitHub database. Use better filtering.")
-
-                for advisory_file in advisory_files:
-                    if advisory_file and advisory_file.endswith('.json'):
-                        try:
-                            with open(advisory_file, 'r') as f:
-                                import json
-                                advisory_data = json.load(f)
-                                
-                                result["found"] = True
-                                
-                                # Extract description
-                                result["description"] = advisory_data['details']
-                                database_specific = advisory_data['database_specific']
-                                
-                                # Extract severity
-                                result["severity"] = database_specific.get('severity', '').upper()
-                                
-                                # Extract references
-                                references = advisory_data.get('references', [])
-                                for ref in references:
-                                    result["references"].append(ref['url'])
-                                
-                                break  # Use first matching advisory
-                        
-                        except Exception as e:
-                            logger.error(f"Error reading advisory file {advisory_file}: {e}")
-        
+            # Normalize CVE ID
+            normalized_cve_id = cve_id.lower().replace("-", "_")
+            
+            # Query database
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT data_array FROM cve_raw_data WHERE cve_id = ?", (normalized_cve_id,))
+            row = cursor.fetchone()
+            conn.close()
+            
+            if not row:
+                return result
+            
+            # Parse data array
+            data_array = json.loads(row[0])
+            data_array_str = str(data_array).lower()
+            
+            # Check if all product name parts are in data_array
+            all_match = True
+            for product_part in product_names_for_lookup:
+                if product_part and product_part.lower() not in data_array_str:
+                    all_match = False
+                    break
+            
+            if not all_match:
+                return result
+            
+            # Look for github_advisory source
+            advisory_data = None
+            for item in data_array:
+                if item["source"] == "github_advisory":
+                    advisory_data = item["data"]
+                    break
+            
+            if not advisory_data:
+                return result
+            
+            # Extract data
+            result["found"] = True
+            result["description"] = advisory_data.get('details', '')
+            database_specific = advisory_data.get('database_specific', {})
+            result["severity"] = database_specific.get('severity', '').upper()
+            
+            # Extract references
+            references = advisory_data.get('references', [])
+            for ref in references:
+                if isinstance(ref, dict):
+                    result["references"].append(ref.get('url', ''))
+            
+            logger.info(f"Found GitHub Advisory for {cve_id}")
+            
         except Exception as e:
             logger.error(f"Error searching GitHub advisories: {e}")
         
@@ -223,8 +227,9 @@ class GitHubAdvisoriesCollector:
 class CVEListCollector:
     """Collector for CVE details from cvelistV5"""
     
-    def __init__(self, cvelist_path):
+    def __init__(self, cvelist_path, config: Dict[str, Any] = {}):
         self.cvelist_path = cvelist_path
+        self.db_path = config.get("PARENT_FOLDER", "./data") + "/cve_context.db"
         self._ensure_cvelist()
     
     def _ensure_cvelist(self):
@@ -257,7 +262,7 @@ class CVEListCollector:
         return
     
     def get_cve_details(self, cve_id: str) -> Dict[str, Any]:
-        """Get CVE details from cvelistV5"""
+        """Get CVE details from database"""
         result = {
             "found": False,
             "description": None,
@@ -265,42 +270,55 @@ class CVEListCollector:
             "references": []
         }
         
-        if not os.path.exists(self.cvelist_path):
-            logger.warning("CVE list not found")
-            return result
-        
         try:
-            # Search for CVE JSON file
-            grep_result = subprocess.run([
-                "find", self.cvelist_path, "-name", f"{cve_id}.json"
-            ], capture_output=True, text=True)
+            import sqlite3
+            import json
             
-            if grep_result.returncode == 0 and grep_result.stdout.strip():
-                cve_file = grep_result.stdout.strip().split('\n')[0]
-                
-                with open(cve_file, 'r') as f:
-                    import json
-                    cve_data = json.load(f)
-                    
-                    result["found"] = True
-                    
-                    # Extract description
-                    descriptions = cve_data.get('containers', {}).get('cna', {}).get('descriptions', [])
-                    if descriptions:
-                        result["description"] = descriptions[0].get('value', '')
-                    
-                    # Extract references
-                    references = cve_data.get('containers', {}).get('cna', {}).get('references', [])
-                    result["references"] = [ref.get('url') for ref in references if ref.get('url')]
-                    
-                    # Extract metrics (CVSS)
-                    metrics = cve_data.get('containers', {}).get('cna', {}).get('metrics', [])
-                    if metrics:
-                        cvss = metrics[0].get('cvssV3_1', {})
-                        result["cvss_score"] = cvss.get('baseScore')
-                        result["severity"] = cvss.get('baseSeverity', '').upper()
-                    
-                    logger.info(f"Found CVE details for {cve_id}")
+            # Normalize CVE ID
+            normalized_cve_id = cve_id.lower().replace("-", "_")
+            
+            # Query database
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT data_array FROM cve_raw_data WHERE cve_id = ?", (normalized_cve_id,))
+            row = cursor.fetchone()
+            conn.close()
+            
+            if not row:
+                return result
+            
+            # Parse data array
+            data_array = json.loads(row[0])
+            
+            # Look for cvelist source
+            cve_data = None
+            for item in data_array:
+                if item["source"] == "cvelist":
+                    cve_data = item["data"]
+                    break
+            
+            if not cve_data:
+                return result
+            
+            result["found"] = True
+            
+            # Extract description
+            descriptions = cve_data.get('containers', {}).get('cna', {}).get('descriptions', [])
+            if descriptions:
+                result["description"] = descriptions[0].get('value', '')
+            
+            # Extract references
+            references = cve_data.get('containers', {}).get('cna', {}).get('references', [])
+            result["references"] = [ref.get('url') for ref in references if ref.get('url')]
+            
+            # Extract metrics (CVSS)
+            metrics = cve_data.get('containers', {}).get('cna', {}).get('metrics', [])
+            if metrics:
+                cvss = metrics[0].get('cvssV3_1', {})
+                result["cvss_score"] = cvss.get('baseScore')
+                result["severity"] = cvss.get('baseSeverity', '').upper()
+            
+            logger.info(f"Found CVE details for {cve_id}")
         
         except Exception as e:
             logger.error(f"Error getting CVE details: {e}")

@@ -11,7 +11,10 @@ import json
 import time
 
 load_dotenv(".env")
-PARENT_FOLDER = "/workspace/"
+# PARENT_FOLDER = "/workspace/"
+# PARENT_FOLDER = "/Users/amansapra/Desktop/NCIIPC/sast-vuln/"
+PARENT_FOLDER = "/home/amanistaken/data/"
+# this should have projects/, db_folder/ , db_folder/cve_context.db etc
 
 def get_context(config) -> str:
     """
@@ -209,74 +212,33 @@ def get_context(config) -> str:
         db.close()
 
 
-
 def main():
     print("SASTRA - Vulnerability Detection System")
     print("=" * 10)
 
-    # PRODUCT_INFO = {
-    #     "product_name": "GeoServer",
-    #     "CVE_ID": "CVE-2024-36401",
-    #     "project_dir": "/Users/amansapra/Desktop/NCIIPC/sast-vuln/test_projects/geoserver",
-    #     "version_of_interest": "2.25.0",
-    #     "FIXED_VERSION": "2.25.2",
-    #     "NEAREST_VULN_VERSION": "2.25.1",
-    #     "context_id": "a32f41ae-f234-4e60-8a6d-ac559589cda9",
-    #     "LANGUAGE": "Java",
-    # }
-    # PRODUCT_INFO = {
-    #     "product_name": "GeoServer",
-    #     "CVE_ID": "CVE-2024-23634",
-    #     "project_dir": "/Users/amansapra/Desktop/NCIIPC/sast-vuln/test_projects/geoserver",
-    #     "version_of_interest": "2.23.1",
-    #     "FIXED_VERSION": "2.23.5",
-    #     "NEAREST_VULN_VERSION": "2.23.4",
-    #     "LANGUAGE": "Java",
-    # }
-    # PRODUCT_INFO = {
-    #     "product_name": "GeoServer",
-    #     "CVE_ID": "CVE-2025-27505",
-    #     "project_dir": "/Users/amansapra/Desktop/NCIIPC/sast-vuln/test_projects/geoserver",
-    #     "version_of_interest": "2.26.1",
-    #     "FIXED_VERSION": "2.26.3",
-    #     "NEAREST_VULN_VERSION": "2.26.2",
-    #     "LANGUAGE": "Java",
-    #     # "context_id": "c403fc89-8b8b-4566-b0b6-3a196276319c",
-    # }
     PRODUCT_INFO = {
-        "product_name": "osTicket",
-        "CVE_ID": "CVE-2025-26241",
-        "project_dir": PARENT_FOLDER + "/projects/" + "/osTicket",
-        "version_of_interest": "1.17.3",
-        "FIXED_VERSION": "1.17.6",
-        "NEAREST_VULN_VERSION": "1.17.5",
-        "LANGUAGE": "PHP"
+        "product_name": "GeoServer",
+        "CVE_ID": "CVE-2024-23634",
+        "project_dir": PARENT_FOLDER + "/test_projects/geoserver",
+        "version_of_interest": "2.23.1",
+        "FIXED_VERSION": "2.23.5",
+        "NEAREST_VULN_VERSION": "2.23.4",
+        "LANGUAGE": "Java",
     }
-    # PRODUCT_INFO = {
-    #     "product_name": "Keras",
-    #     "CVE_ID": "CVE-2025-9905",
-    #     "project_dir": "/Users/amansapra/Desktop/NCIIPC/sast-vuln/test_projects/keras",
-    #     "version_of_interest": "3.10.0",
-    #     "FIXED_VERSION": "3.11.3",
-    #     "NEAREST_VULN_VERSION": "3.11.2",
-    #     "LANGUAGE": "PYTHON"
-    # }
-
-
     
     config = {
         "github_token": os.getenv("GITHUB_TOKEN"),
         "DEBUG_MODE": True,
 
         "PARENT_FOLDER": PARENT_FOLDER,
-        # # 'LLM_CODE_EXPERT': {
-        # #     'LLM_TYPE': 'LITELLM', # litellm can be: litellm,  antropic , openai, ollama (MUST have)
-        # #     'MODEL': 'claude-sonnet-4-5-20250929',
-        # #     'MAX_TOKENS': 200_000, # max tokens to use for context
-        # #     'API_KEY': os.getenv("LLM_CODE_EXPERT_API_KEY"),
-        # #     'BASE_URL': 'https://api.labs.dreamplug.net/', # for litellm and ollama
-        # #     'PROVIDER': 'openai' # supported provider -> ollama, openai   
-        # # },
+        # 'LLM_CODE_EXPERT': {
+        #     'LLM_TYPE': 'LITELLM', # litellm can be: litellm,  antropic , openai, ollama (MUST have)
+        #     'MODEL': 'claude-sonnet-4-5-20250929',
+        #     'MAX_TOKENS': 200_000, # max tokens to use for context
+        #     'API_KEY': os.getenv("LLM_CODE_EXPERT_API_KEY"),
+        #     'BASE_URL': 'https://api.labs.dreamplug.net/', # for litellm and ollama
+        #     'PROVIDER': 'openai' # supported provider -> ollama, openai   
+        },
         # 'LLM_CODE_EXPERT': {
         #     'LLM_TYPE': 'LITELLM',
         #     # 'MODEL': 'kimi-k2-turbo-preview',
@@ -297,14 +259,14 @@ def main():
         'LLM_CODE_EXPERT': {
             'LLM_TYPE': 'litellm',
             'MODEL': 'qwen-32b-fp8',
-            'MAX_TOKENS': 50_000, 
+            'MAX_TOKENS': 30_000, 
             'BASE_URL': 'http://localhost:8000/v1/',
             'API_KEY': os.getenv("LLM_CODE_EXPERT_API_KEY"),
         },
         'LLM_SUMMARIZER': { 
             'LLM_TYPE': 'litellm',
             'MODEL': 'qwen-32b-fp8',
-            'MAX_TOKENS': 50_000, 
+            'MAX_TOKENS': 30_000, 
             'BASE_URL': 'http://localhost:8000/v1/',
             'API_KEY': os.getenv("LLM_SUMMARIZER_API_KEY"),
         }
@@ -441,10 +403,11 @@ IMPORTANT INSTRUCTIONS:
                     'total_tokens': total_tokens,
                     'execution_time_seconds': execution_time
                 }
+                print(">>> full result:")
                 print(finding_data)
                 
-                finding_id = db.insert_agent_finding(finding_data)
-                print(f"✓ Saved to database with ID: {finding_id}")
+                # finding_id = db.insert_agent_finding(finding_data)
+                # print(f"✓ Saved to database with ID: {finding_id}")
                 
             finally:
                 db.close()

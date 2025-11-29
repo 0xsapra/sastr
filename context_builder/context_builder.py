@@ -31,7 +31,7 @@ class ContextBuilder:
         self.db = ContextDatabase(config["PARENT_FOLDER"])
         self.nuclei_collector = NucleiCollector(f"{PARENT_FOLDER}/db_folder/nuclei-templates")
         self.github_advisories = GitHubAdvisoriesCollector(f"{PARENT_FOLDER}/db_folder/advisory-database", config)
-        self.cvelist_collector = CVEListCollector(f"{PARENT_FOLDER}/db_folder/cvelistV5")
+        self.cvelist_collector = CVEListCollector(f"{PARENT_FOLDER}/db_folder/cvelistV5", config)
         self.github_search = GitHubSearchProcessor(config)
         self.link_parser = ReferenceLinkParser()
         
@@ -143,6 +143,7 @@ class ContextBuilder:
         
         all_references.extend(github_search_result["fix_references"][:5])
         # Insert CVE context into database
+
         context_id = self.db.insert_cve_context(cve_data)
         logger.info(f"Created context with ID: {context_id}")
         

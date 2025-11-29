@@ -11,7 +11,7 @@ import logging
 import argparse
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from context_builder.collectors import GitHubAdvisoriesCollector, CVEListCollector
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,25 +23,18 @@ logger = logging.getLogger(__name__)
 class CVEDataSaver:
     """Saves CVE data from multiple sources to SQLite database"""
     
-    def __init__(self, db_path: str, data_folder: str = "./data"):
+    def __init__(self, db_path: str, data_folder):
         self.db_path = db_path
         self.data_folder = data_folder
         self.conn = None
         self.cursor = None
         
-        # Initialize collectors
-        self.github_collector = GitHubAdvisoriesCollector(
-            f"{data_folder}/advisory-database"
-        )
-        self.cvelist_collector = CVEListCollector(
-            f"{data_folder}/cvelistV5"
-        )
-        
         self._initialize_db()
     
     def _initialize_db(self):
         """Initialize database connection and create table"""
-        self.conn = sqlite3.connect(self.db_path)
+        print(self.db_path  + "/cve_context.db")
+        self.conn = sqlite3.connect(self.db_path  + "/cve_context.db")
         self.cursor = self.conn.cursor()
         
         # Create cve_raw_data table
@@ -63,134 +56,55 @@ class CVEDataSaver:
     
     def _normalize_cve_id(self, cve_id: str) -> str:
         """Normalize CVE ID to format: cve_YYYY_XXXX"""
-        # Remove CVE- prefix if present and convert to lowercase
         cve_id = cve_id.upper().replace("CVE-", "")
         parts = cve_id.split("-")
         if len(parts) == 2:
             return f"cve_{parts[0]}_{parts[1]}"
         return f"cve_{cve_id}"
     
-    def _get_github_advisory_data(self, cve_id: str) -> Optional[Dict[str, Any]]:
-        """Get GitHub Advisory data for a CVE"""
-        try:
-            # Search in the advisory database directory
-            advisory_db_path = f"{self.data_folder}/advisory-database"
-            if not os.path.exists(advisory_db_path):
-                logger.warning(f"Advisory database not found at {advisory_db_path}")
-                return None
-            
-            # Search for JSON files containing the CVE ID
-            import subprocess
-            cmd = f'grep -rl "{cve_id}" "{advisory_db_path}" | grep ".json$"'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
-            if result.returncode == 0 and result.stdout.strip():
-                advisory_files = result.stdout.strip().split('\n')
-                
-                # Read the first matching file
-                for advisory_file in advisory_files:
-                    if advisory_file and advisory_file.endswith('.json'):
-                        try:
-                            with open(advisory_file, 'r') as f:
-                                data = json.load(f)
-                                logger.info(f"Found GitHub Advisory data for {cve_id}")
-                                return data
-                        except Exception as e:
-                            logger.error(f"Error reading advisory file {advisory_file}: {e}")
-                            continue
-            
-            logger.info(f"No GitHub Advisory data found for {cve_id}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting GitHub Advisory data for {cve_id}: {e}")
-            return None
+    def _extract_cve_from_github_advisory(self, json_data: Dict[str, Any]) -> Optional[str]:
+        """Extract CVE ID from GitHub Advisory JSON"""
+        aliases = json_data.get('aliases', [])
+        for alias in aliases:
+            if alias.startswith('CVE-'):
+                return alias
+        return None
     
-    def _get_cvelist_data(self, cve_id: str) -> Optional[Dict[str, Any]]:
-        """Get CVEList data for a CVE"""
-        try:
-            cvelist_path = f"{self.data_folder}/cvelistV5"
-            if not os.path.exists(cvelist_path):
-                logger.warning(f"CVEList not found at {cvelist_path}")
-                return None
-            
-            # Search for CVE JSON file
-            import subprocess
-            result = subprocess.run([
-                "find", cvelist_path, "-name", f"{cve_id}.json"
-            ], capture_output=True, text=True)
-            
-            if result.returncode == 0 and result.stdout.strip():
-                cve_file = result.stdout.strip().split('\n')[0]
-                
-                with open(cve_file, 'r') as f:
-                    data = json.load(f)
-                    logger.info(f"Found CVEList data for {cve_id}")
-                    return data
-            
-            logger.info(f"No CVEList data found for {cve_id}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting CVEList data for {cve_id}: {e}")
-            return None
-    
-    def save_cve_data(self, cve_id: str) -> bool:
+    def save_cve_data(self, cve_id: str, source: str, data: Dict[str, Any]) -> bool:
         """
-        Collect and save CVE data from all sources
+        Save or update CVE data in database
         
         Args:
             cve_id: CVE identifier (e.g., CVE-2009-4214)
+            source: Data source (e.g., "github_advisory", "cvelist")
+            data: JSON data to store
         
         Returns:
             bool: True if data was saved, False otherwise
         """
         normalized_id = self._normalize_cve_id(cve_id)
-        data_array = []
-        
-        # Collect GitHub Advisory data
-        github_data = self._get_github_advisory_data(cve_id)
-        if github_data:
-            data_array.append({
-                "source": "github_advisory",
-                "data": github_data
-            })
-        
-        # Collect CVEList data
-        cvelist_data = self._get_cvelist_data(cve_id)
-        if cvelist_data:
-            data_array.append({
-                "source": "cvelist",
-                "data": cvelist_data
-            })
-        
-        # Only save if we have data from at least one source
-        if not data_array:
-            logger.warning(f"No data found for {cve_id} from any source")
-            return False
-        
-        # Check if CVE already exists
-        self.cursor.execute("SELECT cve_id FROM cve_raw_data WHERE cve_id = ?", (normalized_id,))
-        existing = self.cursor.fetchone()
-        
         timestamp = datetime.now().isoformat()
         
+        # Check if CVE already exists
+        self.cursor.execute("SELECT data_array FROM cve_raw_data WHERE cve_id = ?", (normalized_id,))
+        existing = self.cursor.fetchone()
+        
         if existing:
-            # Update existing record - append new data
-            self.cursor.execute("SELECT data_array FROM cve_raw_data WHERE cve_id = ?", (normalized_id,))
-            existing_data = json.loads(self.cursor.fetchone()[0])
+            # Update existing record - merge data
+            existing_data = json.loads(existing[0])
             
-            # Merge data arrays (avoid duplicates by source)
-            existing_sources = {item["source"] for item in existing_data}
-            for new_item in data_array:
-                if new_item["source"] not in existing_sources:
-                    existing_data.append(new_item)
-                else:
+            # Check if this source already exists
+            source_exists = False
+            for i, item in enumerate(existing_data):
+                if item["source"] == source:
                     # Update existing source data
-                    for i, item in enumerate(existing_data):
-                        if item["source"] == new_item["source"]:
-                            existing_data[i] = new_item
-                            break
+                    existing_data[i] = {"source": source, "data": data}
+                    source_exists = True
+                    break
+            
+            if not source_exists:
+                # Append new source data
+                existing_data.append({"source": source, "data": data})
             
             self.cursor.execute("""
                 UPDATE cve_raw_data 
@@ -198,18 +112,110 @@ class CVEDataSaver:
                 WHERE cve_id = ?
             """, (json.dumps(existing_data), timestamp, normalized_id))
             
-            logger.info(f"Updated existing data for {normalized_id}")
+            logger.debug(f"Updated {normalized_id} with {source} data")
         else:
             # Insert new record
+            data_array = [{"source": source, "data": data}]
+            
             self.cursor.execute("""
                 INSERT INTO cve_raw_data (cve_id, data_array, last_updated)
                 VALUES (?, ?, ?)
             """, (normalized_id, json.dumps(data_array), timestamp))
             
-            logger.info(f"Inserted new data for {normalized_id}")
+            logger.debug(f"Inserted {normalized_id} with {source} data")
         
         self.conn.commit()
         return True
+    
+    def process_github_advisories(self, limit: Optional[int] = None) -> Dict[str, int]:
+        """Process all GitHub Advisory files"""
+        stats = {"processed": 0, "saved": 0, "errors": 0}
+        
+        advisory_db_path = Path(self.data_folder) / "advisory-database"
+        if not advisory_db_path.exists():
+            logger.warning(f"Advisory database not found at {advisory_db_path}")
+            return stats
+        
+        logger.info(f"Processing GitHub Advisory database from {advisory_db_path}")
+        
+        # Walk through all JSON files
+        for json_file in advisory_db_path.rglob("*.json"):
+            if limit and stats["processed"] >= limit:
+                break
+            
+            try:
+                with open(json_file, 'r') as f:
+                    data = json.load(f)
+                
+                # Extract CVE ID from aliases
+                cve_id = self._extract_cve_from_github_advisory(data)
+                if cve_id:
+                    self.save_cve_data(cve_id, "github_advisory", data)
+                    stats["saved"] += 1
+                
+                stats["processed"] += 1
+                
+                if stats["processed"] % 1000 == 0:
+                    logger.info(f"Processed {stats['processed']} GitHub Advisory files...")
+                    
+            except Exception as e:
+                logger.error(f"Error processing {json_file}: {e}")
+                stats["errors"] += 1
+        
+        logger.info(f"GitHub Advisory processing complete: {stats['saved']} CVEs saved from {stats['processed']} files")
+        return stats
+    
+    def process_cvelist(self, limit: Optional[int] = None) -> Dict[str, int]:
+        """Process all CVEList files"""
+        stats = {"processed": 0, "saved": 0, "errors": 0}
+        
+        cvelist_path = Path(self.data_folder) / "cvelistV5" / "cves"
+        if not cvelist_path.exists():
+            logger.warning(f"CVEList not found at {cvelist_path}")
+            return stats
+        
+        logger.info(f"Processing CVEList database from {cvelist_path}")
+        
+        # Walk through all CVE JSON files
+        for json_file in cvelist_path.rglob("CVE-*.json"):
+            if limit and stats["processed"] >= limit:
+                break
+            
+            try:
+                # Extract CVE ID from filename
+                cve_id = json_file.stem  # Gets filename without extension
+                
+                with open(json_file, 'r') as f:
+                    data = json.load(f)
+                
+                self.save_cve_data(cve_id, "cvelist", data)
+                stats["saved"] += 1
+                stats["processed"] += 1
+                
+                if stats["processed"] % 1000 == 0:
+                    logger.info(f"Processed {stats['processed']} CVEList files...")
+                    
+            except Exception as e:
+                logger.error(f"Error processing {json_file}: {e}")
+                stats["errors"] += 1
+        
+        logger.info(f"CVEList processing complete: {stats['saved']} CVEs saved from {stats['processed']} files")
+        return stats
+    
+    def process_all(self, limit: Optional[int] = None) -> Dict[str, Any]:
+        """Process both GitHub Advisory and CVEList"""
+        logger.info("Starting full processing of all CVE data sources...")
+        
+        github_stats = self.process_github_advisories(limit)
+        cvelist_stats = self.process_cvelist(limit)
+        
+        total_stats = {
+            "github_advisory": github_stats,
+            "cvelist": cvelist_stats,
+            "total_cves": self.get_total_cves()
+        }
+        
+        return total_stats
     
     def get_cve_data(self, cve_id: str) -> Optional[List[Dict[str, Any]]]:
         """Retrieve stored CVE data"""
@@ -222,99 +228,13 @@ class CVEDataSaver:
             return json.loads(row[0])
         return None
     
-    def scan_and_save_all_cves(self, limit: Optional[int] = None) -> Dict[str, int]:
-        """
-        Scan both data sources and save all CVEs found
-        
-        Args:
-            limit: Optional limit on number of CVEs to process
-        
-        Returns:
-            Dict with statistics
-        """
-        stats = {
-            "total_processed": 0,
-            "github_found": 0,
-            "cvelist_found": 0,
-            "saved": 0,
-            "errors": 0
-        }
-        
-        cve_ids = set()
-        
-        # Scan GitHub Advisory database
-        logger.info("Scanning GitHub Advisory database...")
-        advisory_db_path = f"{self.data_folder}/advisory-database"
-        if os.path.exists(advisory_db_path):
-            try:
-                import subprocess
-                result = subprocess.run([
-                    "find", advisory_db_path, "-name", "*.json", "-type", "f"
-                ], capture_output=True, text=True)
-                
-                if result.returncode == 0:
-                    json_files = result.stdout.strip().split('\n')
-                    for json_file in json_files[:limit] if limit else json_files:
-                        if json_file and json_file.endswith('.json'):
-                            try:
-                                with open(json_file, 'r') as f:
-                                    data = json.load(f)
-                                    # Extract CVE IDs from aliases
-                                    aliases = data.get('aliases', [])
-                                    for alias in aliases:
-                                        if alias.startswith('CVE-'):
-                                            cve_ids.add(alias)
-                                            stats["github_found"] += 1
-                            except Exception as e:
-                                logger.debug(f"Error reading {json_file}: {e}")
-                                continue
-            except Exception as e:
-                logger.error(f"Error scanning GitHub Advisory database: {e}")
-        
-        # Scan CVEList database
-        logger.info("Scanning CVEList database...")
-        cvelist_path = f"{self.data_folder}/cvelistV5"
-        if os.path.exists(cvelist_path):
-            try:
-                import subprocess
-                result = subprocess.run([
-                    "find", cvelist_path, "-name", "CVE-*.json", "-type", "f"
-                ], capture_output=True, text=True)
-                
-                if result.returncode == 0:
-                    json_files = result.stdout.strip().split('\n')
-                    for json_file in json_files[:limit] if limit else json_files:
-                        if json_file:
-                            # Extract CVE ID from filename
-                            filename = os.path.basename(json_file)
-                            cve_id = filename.replace('.json', '')
-                            if cve_id.startswith('CVE-'):
-                                cve_ids.add(cve_id)
-                                stats["cvelist_found"] += 1
-            except Exception as e:
-                logger.error(f"Error scanning CVEList database: {e}")
-        
-        # Process all unique CVE IDs
-        logger.info(f"Found {len(cve_ids)} unique CVE IDs")
-        
-        for cve_id in sorted(cve_ids):
-            try:
-                stats["total_processed"] += 1
-                if self.save_cve_data(cve_id):
-                    stats["saved"] += 1
-                
-                # Log progress every 100 CVEs
-                if stats["total_processed"] % 100 == 0:
-                    logger.info(f"Processed {stats['total_processed']}/{len(cve_ids)} CVEs...")
-                    
-            except Exception as e:
-                logger.error(f"Error processing {cve_id}: {e}")
-                stats["errors"] += 1
-        
-        return stats
+    def get_total_cves(self) -> int:
+        """Get total number of CVEs in database"""
+        self.cursor.execute("SELECT COUNT(*) FROM cve_raw_data")
+        return self.cursor.fetchone()[0]
     
     def clear_all_data(self):
-        """Clear all data from the table (for fresh start)"""
+        """Clear all data from the table"""
         self.cursor.execute("DELETE FROM cve_raw_data")
         self.conn.commit()
         logger.info("Cleared all existing CVE data")
@@ -332,7 +252,6 @@ def main():
     )
     parser.add_argument(
         '--db-path',
-        default='./data/cve_context.db',
         help='Path to SQLite database (default: ./data/cve_context.db)'
     )
     parser.add_argument(
@@ -341,18 +260,24 @@ def main():
         help='Folder containing advisory-database and cvelistV5 (default: ./data)'
     )
     parser.add_argument(
-        '--cve-id',
-        help='Specific CVE ID to process (e.g., CVE-2009-4214)'
+        '--process-all',
+        action='store_true',
+        help='Process all CVEs from both sources'
     )
     parser.add_argument(
-        '--scan-all',
+        '--github-only',
         action='store_true',
-        help='Scan and save all CVEs from both sources'
+        help='Process only GitHub Advisory database'
+    )
+    parser.add_argument(
+        '--cvelist-only',
+        action='store_true',
+        help='Process only CVEList database'
     )
     parser.add_argument(
         '--limit',
         type=int,
-        help='Limit number of CVEs to process (for testing)'
+        help='Limit number of files to process (for testing)'
     )
     parser.add_argument(
         '--clear',
@@ -385,35 +310,40 @@ def main():
             else:
                 print(f"No data found for {args.retrieve}")
         
-        elif args.scan_all:
-            # Scan and save all CVEs
-            logger.info("Starting full scan of all CVEs...")
-            stats = saver.scan_and_save_all_cves(limit=args.limit)
-            
+        elif args.github_only:
+            stats = saver.process_github_advisories(limit=args.limit)
             print(f"\n{'='*60}")
-            print("Scan Complete")
+            print("GitHub Advisory Processing Complete")
             print(f"{'='*60}")
-            print(f"Total CVEs processed: {stats['total_processed']}")
-            print(f"GitHub Advisory CVEs found: {stats['github_found']}")
-            print(f"CVEList CVEs found: {stats['cvelist_found']}")
-            print(f"Successfully saved: {stats['saved']}")
+            print(f"Files processed: {stats['processed']}")
+            print(f"CVEs saved: {stats['saved']}")
             print(f"Errors: {stats['errors']}")
+            print(f"Total CVEs in database: {saver.get_total_cves()}")
         
-        elif args.cve_id:
-            # Process specific CVE
-            logger.info(f"Processing {args.cve_id}")
-            success = saver.save_cve_data(args.cve_id)
-            
-            if success:
-                print(f"\n{'='*60}")
-                print(f"Successfully saved data for {args.cve_id}")
-                print(f"{'='*60}")
-                
-                # Display saved data
-                data = saver.get_cve_data(args.cve_id)
-                print(f"Sources: {[item['source'] for item in data]}")
-            else:
-                print(f"Failed to save data for {args.cve_id}")
+        elif args.cvelist_only:
+            stats = saver.process_cvelist(limit=args.limit)
+            print(f"\n{'='*60}")
+            print("CVEList Processing Complete")
+            print(f"{'='*60}")
+            print(f"Files processed: {stats['processed']}")
+            print(f"CVEs saved: {stats['saved']}")
+            print(f"Errors: {stats['errors']}")
+            print(f"Total CVEs in database: {saver.get_total_cves()}")
+        
+        elif args.process_all:
+            stats = saver.process_all(limit=args.limit)
+            print(f"\n{'='*60}")
+            print("Processing Complete")
+            print(f"{'='*60}")
+            print(f"\nGitHub Advisory:")
+            print(f"  Files processed: {stats['github_advisory']['processed']}")
+            print(f"  CVEs saved: {stats['github_advisory']['saved']}")
+            print(f"  Errors: {stats['github_advisory']['errors']}")
+            print(f"\nCVEList:")
+            print(f"  Files processed: {stats['cvelist']['processed']}")
+            print(f"  CVEs saved: {stats['cvelist']['saved']}")
+            print(f"  Errors: {stats['cvelist']['errors']}")
+            print(f"\nTotal CVEs in database: {stats['total_cves']}")
         
         else:
             parser.print_help()
@@ -424,3 +354,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# python save_cve_data.py --clear --process-all --data-folder ../db_folder/ --db-path ../db_folder/
+
+# python save_cve_data.py --process-all --data-folder ../db_folder/
