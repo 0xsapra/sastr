@@ -24,8 +24,7 @@ def get_context(config) -> str:
     Returns:
         Formatted string containing all context data (max ~80k chars)
     """
-    db_path = config['DB_PATH']
-    db = ContextDatabase(db_path)
+    db = ContextDatabase(config['PARENT_FOLDER'])
     
     try:
         # Get CVE context
@@ -269,7 +268,7 @@ def main():
         "github_token": os.getenv("GITHUB_TOKEN"),
         "DEBUG_MODE": True,
 
-        "DB_PATH": PARENT_FOLDER + "/db_folder/cve_context.db",
+        "PARENT_FOLDER": PARENT_FOLDER,
         # # 'LLM_CODE_EXPERT': {
         # #     'LLM_TYPE': 'LITELLM', # litellm can be: litellm,  antropic , openai, ollama (MUST have)
         # #     'MODEL': 'claude-sonnet-4-5-20250929',
@@ -332,14 +331,14 @@ def main():
             ]).content
             
             # Save summarized context to database
-            db = ContextDatabase(config['DB_PATH'])
+        db = ContextDatabase(config['PARENT_FOLDER'])
             db.update_summarized_context(config['context_id'], summarized_context)
             db.close()
 
         finally:
             builder.close()
     # Context already exists, retrieve summarized context from database
-    db = ContextDatabase(config['DB_PATH'])
+    db = ContextDatabase(config['PARENT_FOLDER'])
     summarized_context = db.get_summarized_context(config['context_id'])
     db.close()
     
@@ -425,8 +424,8 @@ IMPORTANT INSTRUCTIONS:
             print("\n" + "=" * 80)
             print("SAVING TO DATABASE...")
             print("=" * 80)
-            
-            db = ContextDatabase(config['DB_PATH'])
+
+            db = ContextDatabase(config['PARENT_FOLDER'])
             try:
                 finding_data = {
                     'context_id': config['context_id'],

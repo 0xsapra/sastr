@@ -28,7 +28,7 @@ class ContextBuilder:
     """Main context builder orchestrator"""
 
     def __init__(self,PARENT_FOLDER,  config: Dict[str, Any] = {}):
-        self.db = ContextDatabase(config["DB_PATH"])
+        self.db = ContextDatabase(config["PARENT_FOLDER"])
         self.nuclei_collector = NucleiCollector(f"{PARENT_FOLDER}/db_folder/nuclei-templates")
         self.github_advisories = GitHubAdvisoriesCollector(f"{PARENT_FOLDER}/db_folder/advisory-database", config)
         self.cvelist_collector = CVEListCollector(f"{PARENT_FOLDER}/db_folder/cvelistV5")

@@ -7,10 +7,9 @@ from typing import Dict, List, Optional, Any
 class ContextDatabase:
     """Database handler for CVE context storage"""
     
-    def __init__(self, db_path: str):
+    def __init__(self, parent_folder: str):
 
-        db_path = f"{db_path}/cve_context.db"
-        print(db_path)
+        db_path = f"{parent_folder}/db_folder/cve_context.db"
         self.db_path = db_path
         self.conn = None
         self.cursor = None
