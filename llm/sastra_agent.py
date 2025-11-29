@@ -320,7 +320,7 @@ Shell: {helper.get_shell_type()}
 
 ## Project Structure
 Files in {self.config['project_dir']}:
-{helper.list_files_in_directory(self.config['project_dir'], limit=200)}"""
+{helper.list_files_in_directory(self.config['project_dir'], limit=100)}"""
 
 
         user_prompt = f"""You are provided with the following CVE context and project environment.
