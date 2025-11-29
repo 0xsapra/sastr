@@ -64,11 +64,10 @@ When you find the bug, pass this JSON structure to the `completion` tool:
 ```json
 {
   "file_path": "src/vulnerable_file.php",
-  "line_numbers": [42, 43, 44],
+  "line_numbers": 43,
   "vulnerable_code_segment": "original_code_string",
   "vulnerability_type": "SQL Injection",
   "confidence": "High",
-  "reasoning": "Explanation linking code to CVE...",
-  "fix_reference": "Fixed in v1.2 by commit xyz"
+  "reasoning": "Explanation linking code to CVE..."
 }
 """
