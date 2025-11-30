@@ -44,3 +44,13 @@ huggingface-cli download Qwen/Qwen2.5-Coder-32B-Instruct \
 
 # # 4. Run Server
 # python3 inference_server.py
+
+python3 -m vllm.entrypoints.openai.api_server \
+    --model /home/amanistaken/data/upload/self_model/gpt-oss-120b \
+    --served-model-name gpt-oss-120b \
+    --trust-remote-code \
+    --gpu-memory-utilization 0.95 \
+    --max-model-len 65536 \
+    --kv-cache-dtype fp8 \
+    --enable-auto-tool-choice \
+    --tool-call-parser openai_json_tool_parser
